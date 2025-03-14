@@ -18,10 +18,6 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMappingExposure = 0.8;
 document.body.appendChild(renderer.domElement);
 
-// Add a grid helper
-const gridHelper = new THREE.GridHelper(50, 50);
-scene.add(gridHelper);
-
 // Create materials that we'll reuse
 const concreteMaterial = new THREE.MeshStandardMaterial({
     color: 0x888888,
@@ -64,7 +60,9 @@ function createRoadSegment(zPosition) {
     const roadMaterial = new THREE.MeshStandardMaterial({
         color: 0x444444,
         roughness: 0.8,
-        metalness: 0.2
+        metalness: 0.2,
+        wireframe: false,
+        flatShading: false
     });
     const road = new THREE.Mesh(roadGeometry, roadMaterial);
     road.rotation.x = -Math.PI / 2;
@@ -112,7 +110,8 @@ const roadSegments = [];
 const SEGMENT_LENGTH = 150;
 const VISIBLE_SEGMENTS = 4;
 
-for (let i = 0; i < VISIBLE_SEGMENTS; i++) {
+// Create initial segments in both directions
+for (let i = -VISIBLE_SEGMENTS; i < VISIBLE_SEGMENTS; i++) {
     const segment = createRoadSegment(i * SEGMENT_LENGTH);
     roadSegments.push(segment);
     scene.add(segment);
@@ -210,19 +209,35 @@ function updateCar() {
     camera.position.copy(car.mesh.position).add(cameraOffset);
     camera.lookAt(car.mesh.position);
 
-    // Check if we need to create new road segment
+    // Check if we need to create new road segments
     const currentSegmentIndex = Math.floor(car.position.z / SEGMENT_LENGTH);
     
+    // Create segments ahead
     while (roadSegments.length < currentSegmentIndex + VISIBLE_SEGMENTS) {
         const newSegment = createRoadSegment(roadSegments.length * SEGMENT_LENGTH);
         roadSegments.push(newSegment);
         scene.add(newSegment);
-        
-        // Remove far segments
-        if (roadSegments.length > VISIBLE_SEGMENTS + 2) {
-            const oldSegment = roadSegments.shift();
-            scene.remove(oldSegment);
-        }
+    }
+    
+    // Create segments behind
+    while (Math.min(...roadSegments.map(s => s.children[0].position.z)) > (currentSegmentIndex - VISIBLE_SEGMENTS) * SEGMENT_LENGTH) {
+        const newSegment = createRoadSegment((Math.min(...roadSegments.map(s => s.children[0].position.z)) - SEGMENT_LENGTH));
+        roadSegments.unshift(newSegment);
+        scene.add(newSegment);
+    }
+    
+    // Remove far segments ahead
+    while (roadSegments.length > VISIBLE_SEGMENTS * 2 && 
+           roadSegments[roadSegments.length - 1].children[0].position.z > car.position.z + SEGMENT_LENGTH * VISIBLE_SEGMENTS) {
+        const oldSegment = roadSegments.pop();
+        scene.remove(oldSegment);
+    }
+    
+    // Remove far segments behind
+    while (roadSegments.length > VISIBLE_SEGMENTS * 2 && 
+           roadSegments[0].children[0].position.z < car.position.z - SEGMENT_LENGTH * VISIBLE_SEGMENTS) {
+        const oldSegment = roadSegments.shift();
+        scene.remove(oldSegment);
     }
 }
 

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import CarFactory from './cars/carFactory.js';
 
 // Create a scene
 const scene = new THREE.Scene();
@@ -117,23 +118,8 @@ for (let i = -VISIBLE_SEGMENTS; i < VISIBLE_SEGMENTS; i++) {
     scene.add(segment);
 }
 
-// Car setup
-const car = {
-    mesh: null,
-    speed: 0,
-    rotation: 0,
-    position: { x: 0, z: 0 },
-    acceleration: 0.005,
-    maxSpeed: 0.5,
-    friction: 0.99
-};
-
-// Create car mesh
-const carGeometry = new THREE.BoxGeometry(2, 1, 4);
-const carMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
-car.mesh = new THREE.Mesh(carGeometry, carMaterial);
-car.mesh.position.y = 0.5;
-car.mesh.castShadow = true;
+// Create the car
+const car = CarFactory.createCar('basicbitch');
 scene.add(car.mesh);
 
 // Camera setup
@@ -147,17 +133,41 @@ const keys = {
     d: false
 };
 
+// Add orbit controls
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.screenSpacePanning = false;
+controls.minDistance = 5;
+controls.maxDistance = 100;
+controls.maxPolarAngle = Math.PI / 2;
+
+// Add camera mode switching
+let cameraMode = 'follow'; // 'follow' or 'orbit'
+
+// Add key listener for camera toggle
 window.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() === 'c') {
+        toggleCameraMode();
+    }
+    
+    // Original keyboard controls for car
     if (keys.hasOwnProperty(e.key.toLowerCase())) {
         keys[e.key.toLowerCase()] = true;
     }
 });
 
-window.addEventListener('keyup', (e) => {
-    if (keys.hasOwnProperty(e.key.toLowerCase())) {
-        keys[e.key.toLowerCase()] = false;
+function toggleCameraMode() {
+    cameraMode = cameraMode === 'follow' ? 'orbit' : 'follow';
+    
+    if (cameraMode === 'orbit') {
+        // Set the orbit controls target to the car's position
+        controls.target.copy(car.mesh.position);
+        controls.enabled = true;
+    } else {
+        controls.enabled = false;
     }
-});
+}
 
 // Handle window resizing
 window.addEventListener('resize', () => {
@@ -171,43 +181,37 @@ window.addEventListener('resize', () => {
 function updateCar() {
     // Forward/Backward movement
     if (keys.w) {
-        car.speed += car.acceleration;
+        car.accelerate();
     }
     if (keys.s) {
-        car.speed -= car.acceleration;
+        car.brake();
     }
 
     // Rotation
     if (keys.a) {
-        car.rotation += 0.03;
+        car.turnLeft();
     }
     if (keys.d) {
-        car.rotation -= 0.03;
+        car.turnRight();
     }
 
     // Apply friction
-    car.speed *= car.friction;
+    car.applyFriction();
+    car.update();
 
-    // Clamp speed
-    car.speed = Math.max(Math.min(car.speed, car.maxSpeed), -car.maxSpeed);
-
-    // Update position
-    car.position.x += Math.sin(car.rotation) * car.speed;
-    car.position.z += Math.cos(car.rotation) * car.speed;
-
-    // Update car mesh
-    car.mesh.position.x = car.position.x;
-    car.mesh.position.z = car.position.z;
-    car.mesh.rotation.y = car.rotation;
-
-    // Update camera position
-    const cameraOffset = new THREE.Vector3(
-        -Math.sin(car.rotation) * 15,
-        10,
-        -Math.cos(car.rotation) * 15
-    );
-    camera.position.copy(car.mesh.position).add(cameraOffset);
-    camera.lookAt(car.mesh.position);
+    // Only update camera position if in follow mode
+    if (cameraMode === 'follow') {
+        const cameraOffset = new THREE.Vector3(
+            -Math.sin(car.rotation) * 15,
+            10,
+            -Math.cos(car.rotation) * 15
+        );
+        camera.position.copy(car.mesh.position).add(cameraOffset);
+        camera.lookAt(car.mesh.position);
+    } else if (cameraMode === 'orbit') {
+        // Update the orbit controls target to follow the car
+        controls.target.copy(car.mesh.position);
+    }
 
     // Check if we need to create new road segments
     const currentSegmentIndex = Math.floor(car.position.z / SEGMENT_LENGTH);
@@ -243,7 +247,15 @@ function updateCar() {
 
 function animate() {
     requestAnimationFrame(animate);
+    
+    // Update car and road
     updateCar();
+    
+    // Update orbit controls if enabled
+    if (cameraMode === 'orbit') {
+        controls.update();
+    }
+    
     renderer.render(scene, camera);
 }
 

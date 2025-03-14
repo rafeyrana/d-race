@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import CarFactory from './cars/carFactory.js';
+import CommandsModal from './ui/commandsModal.js';
+import './ui/styles.css';
 
 // Create a scene
 const scene = new THREE.Scene();
@@ -258,5 +260,8 @@ function animate() {
     
     renderer.render(scene, camera);
 }
+
+// Initialize the commands modal
+const commandsModal = new CommandsModal();
 
 animate();

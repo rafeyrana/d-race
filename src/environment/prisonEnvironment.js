@@ -371,7 +371,7 @@ function createSignage(type, position) {
     return sign;
 }
 
-// Add a new function to create grass patches
+// Optimize the grass generation to use instanced meshes for better performance
 function createGrassPatch(width, length, density, position) {
     const grass = new THREE.Group();
     
@@ -389,36 +389,46 @@ function createGrassPatch(width, length, density, position) {
     ground.receiveShadow = true;
     grass.add(ground);
     
-    // Create individual grass blades based on density
-    const grassBladeCount = Math.floor(width * length * density);
+    // Use instanced mesh for grass blades - MUCH more efficient
+    const bladeGeometry = new THREE.BoxGeometry(0.15, 0.5, 0.15);
     const grassMaterials = [MATERIALS.grass, MATERIALS.grassLight, MATERIALS.grassDry];
     
-    for (let i = 0; i < grassBladeCount; i++) {
-        // Randomize height and width for natural look
-        const height = 0.2 + Math.random() * 0.8;
-        const bladeWidth = 0.1 + Math.random() * 0.2;
+    // Significantly reduce the density for better performance
+    const grassBladeCount = Math.floor(width * length * density * 0.2); // Reduced density by 80%
+    
+    // Create an instanced mesh for each material type
+    grassMaterials.forEach((material, materialIndex) => {
+        // Allocate approximately 1/3 of blades to each material
+        const instanceCount = Math.floor(grassBladeCount / 3);
+        const instancedMesh = new THREE.InstancedMesh(bladeGeometry, material, instanceCount);
         
-        // Create simple grass blade as a box (for performance)
-        const bladeGeometry = new THREE.BoxGeometry(bladeWidth, height, bladeWidth);
-        const bladeMaterial = grassMaterials[Math.floor(Math.random() * grassMaterials.length)];
-        const blade = new THREE.Mesh(bladeGeometry, bladeMaterial);
+        const dummy = new THREE.Object3D();
+        let instanceIndex = 0;
         
-        // Random position within patch
-        const x = (Math.random() - 0.5) * width;
-        const z = (Math.random() - 0.5) * length;
-        blade.position.set(x, height/2, z);
+        // Create instances
+        for (let i = 0; i < instanceCount; i++) {
+            // Randomize height and position
+            const height = 0.2 + Math.random() * 0.6;
+            const x = (Math.random() - 0.5) * width;
+            const z = (Math.random() - 0.5) * length;
+            
+            dummy.position.set(x, height/2, z);
+            dummy.scale.set(1, height, 1);
+            dummy.rotation.set(
+                (Math.random() - 0.5) * 0.1, 
+                Math.random() * Math.PI * 2,
+                (Math.random() - 0.5) * 0.1
+            );
+            
+            dummy.updateMatrix();
+            instancedMesh.setMatrixAt(instanceIndex, dummy.matrix);
+            instanceIndex++;
+        }
         
-        // Slight random rotation for natural look
-        blade.rotation.set(
-            (Math.random() - 0.5) * 0.2, 
-            Math.random() * Math.PI * 2,
-            (Math.random() - 0.5) * 0.2
-        );
-        
-        blade.castShadow = true;
-        blade.receiveShadow = true;
-        grass.add(blade);
-    }
+        instancedMesh.castShadow = true;
+        instancedMesh.receiveShadow = true;
+        grass.add(instancedMesh);
+    });
     
     // Position the entire grass patch
     grass.position.copy(position);
@@ -435,31 +445,29 @@ function createEnvironmentSection(zPosition, sectionLength) {
     const rightWall = createPrisonWall(sectionLength, 5, new THREE.Vector3(40, 0, zPosition));
     section.add(leftWall, rightWall);
     
-    // Add grass patches on both sides of the road
-    const grassPatchSize = 20; // Size of each grass patch
+    // Reduce the number of grass patches and their density
+    const grassPatchSize = 30; // Larger patches = fewer patches
     const numPatches = Math.ceil(sectionLength / grassPatchSize);
     
-    // Create grass between road and walls
+    // Create fewer patches with lower density
     for (let i = 0; i < numPatches; i++) {
-        // Left side grass (between road and wall)
         const leftGrass = createGrassPatch(
-            15, // Width - area between road and wall
+            15, 
             grassPatchSize, 
-            0.3, // Density - adjust for performance
+            0.05, // Much lower density
             new THREE.Vector3(
-                -26, // Centered between road edge (at -15.5) and wall (at -40)
+                -26,
                 0,
                 zPosition - (i * grassPatchSize) + sectionLength/2 - grassPatchSize/2
             )
         );
         
-        // Right side grass (between road and wall)
         const rightGrass = createGrassPatch(
-            15, // Width
+            15,
             grassPatchSize,
-            0.3, // Density
+            0.05, // Much lower density
             new THREE.Vector3(
-                26, // Centered between road edge (at 15.5) and wall (at 40)
+                26,
                 0,
                 zPosition - (i * grassPatchSize) + sectionLength/2 - grassPatchSize/2
             )
@@ -468,8 +476,8 @@ function createEnvironmentSection(zPosition, sectionLength) {
         section.add(leftGrass, rightGrass);
     }
     
-    // Add variability with taller grass in random spots
-    for (let i = 0; i < 5; i++) {
+    // Reduce number of random tall grass patches from 5 to 2
+    for (let i = 0; i < 2; i++) {
         const side = Math.random() > 0.5 ? -1 : 1;
         const position = new THREE.Vector3(
             side * (20 + Math.random() * 14), // Random distance from road

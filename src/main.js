@@ -67,10 +67,9 @@ function createRoadSegment(zPosition) {
     const roadMaterial = new THREE.MeshStandardMaterial({
         color: 0x444444,
         roughness: 0.8,
-        metalness: 0.2,
-        wireframe: false,
-        flatShading: false
+        metalness: 0.2
     });
+    
     const road = new THREE.Mesh(roadGeometry, roadMaterial);
     road.rotation.x = -Math.PI / 2;
     road.position.z = zPosition;
@@ -109,10 +108,16 @@ function createRoadSegment(zPosition) {
     
     segment.add(barrier1, barrier2);
 
-    // Also create and add an environment section for this segment
-    const environmentSection = createEnvironmentSection(zPosition, SEGMENT_LENGTH);
-    environmentSections.push(environmentSection);
-    scene.add(environmentSection);
+    // Create environment section with error handling
+    try {
+        const environmentSection = createEnvironmentSection(zPosition, SEGMENT_LENGTH);
+        environmentSections.push(environmentSection);
+        scene.add(environmentSection);
+    } catch (error) {
+        console.error("Error creating environment section:", error);
+        // Push a placeholder to maintain array sync
+        environmentSections.push(null);
+    }
 
     return segment;
 }
@@ -165,6 +170,13 @@ window.addEventListener('keydown', (e) => {
     // Original keyboard controls for car
     if (keys.hasOwnProperty(e.key.toLowerCase())) {
         keys[e.key.toLowerCase()] = true;
+    }
+});
+
+// First, let's fix the keyup event listener that seems to be missing
+window.addEventListener('keyup', (e) => {
+    if (keys.hasOwnProperty(e.key.toLowerCase())) {
+        keys[e.key.toLowerCase()] = false;
     }
 });
 
@@ -241,15 +253,31 @@ function updateCar() {
         scene.add(newSegment);
     }
     
+    // Display environment debug info
+    const debugElement = document.getElementById('debug-info') || createDebugElement();
+    debugElement.textContent = `Road: ${roadSegments.length}, Env: ${environmentSections.length}`;
+    
+    // Fix: Check if arrays are out of sync
+    if (roadSegments.length !== environmentSections.length) {
+        console.warn(`Arrays out of sync! Road: ${roadSegments.length}, Env: ${environmentSections.length}`);
+        
+        // Attempt to recover by rebuilding the environment
+        rebuildEnvironment();
+    }
+    
     // Remove far segments ahead
     while (roadSegments.length > VISIBLE_SEGMENTS * 2 && 
            roadSegments[roadSegments.length - 1].children[0].position.z > car.position.z + SEGMENT_LENGTH * VISIBLE_SEGMENTS) {
         const oldSegment = roadSegments.pop();
         scene.remove(oldSegment);
         
-        // Also remove the corresponding environment section
-        const oldEnvironment = environmentSections.pop();
-        scene.remove(oldEnvironment);
+        // Also remove the corresponding environment section if it exists
+        if (environmentSections.length > 0) {
+            const oldEnvironment = environmentSections.pop();
+            if (oldEnvironment) {
+                scene.remove(oldEnvironment);
+            }
+        }
     }
     
     // Remove far segments behind
@@ -258,10 +286,20 @@ function updateCar() {
         const oldSegment = roadSegments.shift();
         scene.remove(oldSegment);
         
-        // Also remove the corresponding environment section
-        const oldEnvironment = environmentSections.shift();
-        scene.remove(oldEnvironment);
+        // Also remove the corresponding environment section if it exists
+        if (environmentSections.length > 0) {
+            const oldEnvironment = environmentSections.shift();
+            if (oldEnvironment) {
+                scene.remove(oldEnvironment);
+            }
+        }
     }
+
+    // Add this at the end of the function to debug performance
+    // Display FPS counter
+    const fpsElement = document.getElementById('fps-counter') || createFpsCounter();
+    fpsElement.textContent = `FPS: ${Math.round(1 / (performance.now() - lastFrameTime) * 1000)}`;
+    lastFrameTime = performance.now();
 }
 
 function animate() {
@@ -282,3 +320,60 @@ function animate() {
 const commandsModal = new CommandsModal();
 
 animate();
+
+// Helper to create FPS counter
+function createFpsCounter() {
+    const fpsElement = document.createElement('div');
+    fpsElement.id = 'fps-counter';
+    fpsElement.style.position = 'fixed';
+    fpsElement.style.bottom = '10px';
+    fpsElement.style.right = '10px';
+    fpsElement.style.backgroundColor = 'rgba(0,0,0,0.5)';
+    fpsElement.style.color = 'white';
+    fpsElement.style.padding = '5px';
+    fpsElement.style.borderRadius = '3px';
+    fpsElement.style.fontFamily = 'monospace';
+    document.body.appendChild(fpsElement);
+    
+    // Initialize lastFrameTime
+    window.lastFrameTime = performance.now();
+    
+    return fpsElement;
+}
+
+// Create a debug element
+function createDebugElement() {
+    const debugElement = document.createElement('div');
+    debugElement.id = 'debug-info';
+    debugElement.style.position = 'fixed';
+    debugElement.style.bottom = '40px';
+    debugElement.style.right = '10px';
+    debugElement.style.backgroundColor = 'rgba(0,0,0,0.5)';
+    debugElement.style.color = 'white';
+    debugElement.style.padding = '5px';
+    debugElement.style.borderRadius = '3px';
+    debugElement.style.fontFamily = 'monospace';
+    document.body.appendChild(debugElement);
+    return debugElement;
+}
+
+// Function to rebuild the environment if it's missing
+function rebuildEnvironment() {
+    console.log("Rebuilding environment...");
+    
+    // Clear existing environment sections
+    environmentSections.forEach(section => {
+        if (section) scene.remove(section);
+    });
+    environmentSections.length = 0;
+    
+    // Rebuild environment sections for each road segment
+    roadSegments.forEach(segment => {
+        const zPosition = segment.children[0].position.z;
+        const environmentSection = createEnvironmentSection(zPosition, SEGMENT_LENGTH);
+        environmentSections.push(environmentSection);
+        scene.add(environmentSection);
+    });
+    
+    console.log("Environment rebuilt with", environmentSections.length, "sections");
+}

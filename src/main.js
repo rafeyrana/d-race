@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import CarFactory from './cars/carFactory.js';
 import CommandsModal from './ui/commandsModal.js';
 import './ui/styles.css';
+import { createEnvironmentSection } from './environment/prisonEnvironment.js';
 
 // Create a scene
 const scene = new THREE.Scene();
@@ -54,6 +55,9 @@ scene.add(sunLight);
 // Remove fog or make it much less dense
 scene.fog = new THREE.Fog(0x88ccff, 100, 300); // Pushed far back, matching sky color
 
+// Create environment sections array
+const environmentSections = [];
+
 // Function to create infinite road segments
 function createRoadSegment(zPosition) {
     const segment = new THREE.Group();
@@ -104,6 +108,11 @@ function createRoadSegment(zPosition) {
     barrier2.castShadow = true;
     
     segment.add(barrier1, barrier2);
+
+    // Also create and add an environment section for this segment
+    const environmentSection = createEnvironmentSection(zPosition, SEGMENT_LENGTH);
+    environmentSections.push(environmentSection);
+    scene.add(environmentSection);
 
     return segment;
 }
@@ -237,6 +246,10 @@ function updateCar() {
            roadSegments[roadSegments.length - 1].children[0].position.z > car.position.z + SEGMENT_LENGTH * VISIBLE_SEGMENTS) {
         const oldSegment = roadSegments.pop();
         scene.remove(oldSegment);
+        
+        // Also remove the corresponding environment section
+        const oldEnvironment = environmentSections.pop();
+        scene.remove(oldEnvironment);
     }
     
     // Remove far segments behind
@@ -244,6 +257,10 @@ function updateCar() {
            roadSegments[0].children[0].position.z < car.position.z - SEGMENT_LENGTH * VISIBLE_SEGMENTS) {
         const oldSegment = roadSegments.shift();
         scene.remove(oldSegment);
+        
+        // Also remove the corresponding environment section
+        const oldEnvironment = environmentSections.shift();
+        scene.remove(oldEnvironment);
     }
 }
 
